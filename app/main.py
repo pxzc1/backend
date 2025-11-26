@@ -32,8 +32,10 @@ def preprocess(img: Image.Image):
     img = img.convert("RGB")
     img = img.resize((224, 224))
 
-    img = np.array(img).astype("float32") / 255.0
-    img = (img - np.array([0.485, 0.456, 0.406])) / np.array([0.229, 0.224, 0.225])
+    img = np.array(img).astype(np.float32) / 255.0
+    mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+    std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+    img = (img - mean) / std
     img = img.transpose(2, 0, 1)
     img = np.expand_dims(img, axis=0)
     return img
@@ -47,21 +49,27 @@ async def predict(file: UploadFile = File(...)):
         input_tensor = preprocess(img)
         outputs = session.run(None, {input_name: input_tensor})[0]
 
-        # Softmax and prediction
         exp = np.exp(outputs)
         probs = exp / np.sum(exp, axis=1, keepdims=True)
 
         pred_idx = int(np.argmax(probs, axis=1)[0])
         confidence = float(probs[0][pred_idx] * 100)
+        try:
+            with open("informations.json", "r") as f:
+                info_data = json.load(f)
+            characteristics = info_data.get(idx_to_class[pred_idx], {})
+        except:
+            characteristics = {}
 
         return {
             "class": idx_to_class[pred_idx],
-            "confidence": round(confidence, 2)
+            "confidence": round(confidence, 2),
+            "characteristics": characteristics
         }
 
     except Exception as e:
         return {"error": str(e)}
-    
+
 @app.get("/")
 def home():
     return {"status": "Model API running"}
